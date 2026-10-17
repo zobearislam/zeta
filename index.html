@@ -6,45 +6,84 @@
   <title>Montanza - Zeta</title>
   <style>
     body { margin: 0; background: #111; color: #eee; font-family: system-ui, sans-serif; }
-    #canvas { display: block; margin: 20px auto; background: white; border-radius: 8px; }
-    #editor { width: 90%; max-width: 800px; height: 200px; margin: 10px auto; display: block; background: #1e1e1e; color: #fff; border: none; padding: 10px; border-radius: 6px; font-family: monospace; }
+    #canvas { display: block; margin: 20px auto; background: white; border-radius: 8px; max-width: 95vw; }
+    #editor { width: 90%; max-width: 800px; height: 220px; margin: 10px auto; display: block; background: #1e1e1e; color: #fff; border: none; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 14px; }
     button { display: block; margin: 10px auto; padding: 10px 24px; font-size: 16px; background: #0066ff; color: white; border: none; border-radius: 6px; cursor: pointer; }
-    h1 { text-align: center; margin: 20px 0 10px; }
+    h1 { text-align: center; margin: 16px 0 8px; }
+    .hint { text-align: center; color: #888; font-size: 13px; margin-bottom: 8px; }
   </style>
 </head>
 <body>
   <h1>Montanza</h1>
-  <textarea id="editor">circle.full(radius=1.5, at=(-3,1), color="#00AAFF")
-print:circle,full,glow,{(grad:#FF4400,#FFAA00),(R:2.2),(1.5,-0.5),(lum:0.9)}
-print:circle,full,glow,{(grad:#00FF88),(R:1),(-2,-2),(lum:0.5)}
-cnc:(0,0)to(4,3),[{grad:(#FF0000),(#00FF00),(#0000FF)}{thick:0.25}]
-print:rect,full(#FFAA00,#FF0000);(-4,-2)to(-1,1)
-print:rect,outline(#333333);(1,-3)to(4,-1),thick(0.12)</textarea>
+  <div class="hint">Simple drawing language — edit and hit Run</div>
+  <textarea id="editor">// Montanza — lots of simple commands
+bg(#111122)
+axes(0.05)
+
+circle.full(radius=1.4, at=(0,0), color="#0066FF")
+print:circle,full,glow,{(grad:#FF3300,#FFAA00),(R:1.6),(-2.2,1.8),(lum:0.75)}
+print:circle,full,glow,{(grad:#00FFAA),(R:0.8),(2.5,-1.5),(lum:0.55)}
+
+ellipse.full(rx=2.2, ry=0.9, at=(0,-2.8), color="#AA44FF")
+
+tri.full(#FFDD00);(-3.5,2.5),(-1.5,2.5),(-2.5,4)
+
+star(points=5, radius=1.1, at=(3.2,2.2), color="#FFCC00")
+
+cnc:(-3.8,-1)to(3.8,1.5),[{grad:(#FF0066),(#00CCFF),(#66FF00)}{thick:0.16}]
+
+print:rect,full(#FF6600,#FF2200);(-4.2,-3.8)to(-1.8,-1.2)
+print:rect,outline(#FFFFFF);(1.2,-3.6)to(3.8,-1.4),thick(0.09)
+
+text("Montanza", at=(0,3.6), size=0.55, color="#FFFFFF")
+text("simple", at=(0,-4.2), size=0.35, color="#AAAAAA")
+
+polygon.full(#44AAFF);(0,1),(1.2,0.2),(0.6,-1),(-0.6,-1),(-1.2,0.2)</textarea>
   <button onclick="run()">Run</button>
-  <svg id="canvas" width="800" height="600" xmlns="http://www.w3.org/2000/svg"></svg>
+  <svg id="canvas" width="800" height="640" xmlns="http://www.w3.org/2000/svg"></svg>
 
   <script>
     const worldSize = 12;
     const width = 800;
-    const height = 600;
+    const height = 640;
     const scale = Math.min(width, height) / worldSize;
+    let idCounter = 0;
 
     function worldToSvg(x, y) {
-      return {
-        x: width / 2 + x * scale,
-        y: height / 2 - y * scale
-      };
+      return { x: width / 2 + x * scale, y: height / 2 - y * scale };
+    }
+
+    function parseHexes(str) {
+      return (str.match(/#[0-9A-Fa-f]{3,8}/g) || []);
     }
 
     function run() {
       const script = document.getElementById('editor').value;
       const svg = document.getElementById('canvas');
-      svg.innerHTML = '<rect width="100%" height="100%" fill="white"/>';
-      let idCounter = 0;
+      idCounter = 0;
+      svg.innerHTML = '';
+      let bg = '#ffffff';
+
+      // first pass for bg
+      script.trim().split('\n').forEach(line => {
+        const m = line.trim().match(/^bg\((#[0-9A-Fa-f]+)\)/);
+        if (m) bg = m[1];
+      });
+      svg.innerHTML = `<rect width="100%" height="100%" fill="${bg}"/>`;
 
       script.trim().split('\n').forEach(line => {
         line = line.trim();
-        if (!line || line.startsWith('//')) return;
+        if (!line || line.startsWith('//') || line.startsWith('bg(')) return;
+
+        // axes
+        if (line.startsWith('axes')) {
+          const thick = (line.match(/axes\(([\d.]+)\)/) || [0, 0.04])[1];
+          const t = Math.max(1, parseFloat(thick) * scale);
+          const c = worldToSvg(0, 0);
+          svg.innerHTML += `<line x1="0" y1="${c.y}" x2="${width}" y2="${c.y}" stroke="#444" stroke-width="${t}" />`;
+          svg.innerHTML += `<line x1="${c.x}" y1="0" x2="${c.x}" y2="${height}" stroke="#444" stroke-width="${t}" />`;
+          return;
+        }
 
         // circle.full
         let m = line.match(/circle\.full\(radius=([\d.]+),\s*at=\(([\d.-]+),([\d.-]+)\),\s*color="?(#[0-9A-Fa-f]+)"?\)/);
@@ -59,29 +98,82 @@ print:rect,outline(#333333);(1,-3)to(4,-1),thick(0.12)</textarea>
         m = line.match(/print:circle,full,glow,\{([^}]+)\}/);
         if (m) {
           const content = m[1];
-          const hexes = (content.match(/#[0-9A-Fa-f]+/g) || ['#FFFFFF']);
+          const hexes = parseHexes(content);
+          if (!hexes.length) hexes.push('#FFFFFF');
           const rMatch = content.match(/R:([\d.]+)/);
           const radius = rMatch ? parseFloat(rMatch[1]) : 1;
           const posMatch = content.match(/\(([\d.-]+),([\d.-]+)\)/);
           const at = posMatch ? [parseFloat(posMatch[1]), parseFloat(posMatch[2])] : [0, 0];
           const lumMatch = content.match(/lum:([\d.]+)/);
           const lum = lumMatch ? parseFloat(lumMatch[1]) : 0.6;
-
           const p = worldToSvg(at[0], at[1]);
           const r = radius * scale;
           const glowId = 'glow' + (++idCounter);
           const blur = Math.max(4, r * lum * 0.8);
-
-          svg.innerHTML += `<defs><filter id="${glowId}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="${blur}" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
-
+          svg.innerHTML += `<defs><filter id="${glowId}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="${blur}" /><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
           let fill = hexes[0];
           if (hexes.length > 1) {
             const gradId = 'cgrad' + idCounter;
-            let stops = hexes.map((c, i) => `<stop offset="${(i / (hexes.length-1))*100}%" stop-color="${c}" />`).join('');
-            svg.innerHTML += `<defs><radialGradient id="${gradId}" cx="50%" cy="50%" r="50%">${stops}</radialGradient></defs>`;
+            const stops = hexes.map((c, i) => `<stop offset="${(i/(hexes.length-1))*100}%" stop-color="${c}" />`).join('');
+            svg.innerHTML += `<defs><radialGradient id="${gradId}">${stops}</radialGradient></defs>`;
             fill = `url(#${gradId})`;
           }
           svg.innerHTML += `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${fill}" filter="url(#${glowId})" />`;
+          return;
+        }
+
+        // ellipse.full
+        m = line.match(/ellipse\.full\(rx=([\d.]+),\s*ry=([\d.]+),\s*at=\(([\d.-]+),([\d.-]+)\),\s*color="?(#[0-9A-Fa-f]+)"?\)/);
+        if (m) {
+          const rx = parseFloat(m[1]) * scale;
+          const ry = parseFloat(m[2]) * scale;
+          const p = worldToSvg(parseFloat(m[3]), parseFloat(m[4]));
+          svg.innerHTML += `<ellipse cx="${p.x}" cy="${p.y}" rx="${rx}" ry="${ry}" fill="${m[5]}" />`;
+          return;
+        }
+
+        // tri.full
+        m = line.match(/tri\.full\((#[0-9A-Fa-f]+)\);\(([\d.-]+),([\d.-]+)\),\(([\d.-]+),([\d.-]+)\),\(([\d.-]+),([\d.-]+)\)/);
+        if (m) {
+          const pts = [
+            worldToSvg(parseFloat(m[2]), parseFloat(m[3])),
+            worldToSvg(parseFloat(m[4]), parseFloat(m[5])),
+            worldToSvg(parseFloat(m[6]), parseFloat(m[7]))
+          ];
+          const points = pts.map(p => `${p.x},${p.y}`).join(' ');
+          svg.innerHTML += `<polygon points="${points}" fill="${m[1]}" />`;
+          return;
+        }
+
+        // star
+        m = line.match(/star\(points=(\d+),\s*radius=([\d.]+),\s*at=\(([\d.-]+),([\d.-]+)\),\s*color="?(#[0-9A-Fa-f]+)"?\)/);
+        if (m) {
+          const n = parseInt(m[1]);
+          const rad = parseFloat(m[2]) * scale;
+          const p = worldToSvg(parseFloat(m[3]), parseFloat(m[4]));
+          const color = m[5];
+          let pts = [];
+          for (let i = 0; i < n * 2; i++) {
+            const angle = (Math.PI / n) * i - Math.PI / 2;
+            const r = i % 2 === 0 ? rad : rad * 0.4;
+            pts.push(`${p.x + Math.cos(angle) * r},${p.y + Math.sin(angle) * r}`);
+          }
+          svg.innerHTML += `<polygon points="${pts.join(' ')}" fill="${color}" />`;
+          return;
+        }
+
+        // polygon.full
+        m = line.match(/polygon\.full\((#[0-9A-Fa-f]+)\);(.+)/);
+        if (m) {
+          const color = m[1];
+          const pairs = [...m[2].matchAll(/\(([\d.-]+),([\d.-]+)\)/g)];
+          if (pairs.length >= 3) {
+            const points = pairs.map(pr => {
+              const pt = worldToSvg(parseFloat(pr[1]), parseFloat(pr[2]));
+              return `${pt.x},${pt.y}`;
+            }).join(' ');
+            svg.innerHTML += `<polygon points="${points}" fill="${color}" />`;
+          }
           return;
         }
 
@@ -90,13 +182,13 @@ print:rect,outline(#333333);(1,-3)to(4,-1),thick(0.12)</textarea>
         if (m) {
           const p1 = worldToSvg(parseFloat(m[1]), parseFloat(m[2]));
           const p2 = worldToSvg(parseFloat(m[3]), parseFloat(m[4]));
-          const hexes = m[5].match(/#[0-9A-Fa-f]+/g) || [];
+          const hexes = parseHexes(m[5]);
           const thick = Math.max(1, parseFloat(m[6]) * scale);
           if (hexes.length === 1) {
             svg.innerHTML += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="${hexes[0]}" stroke-width="${thick}" stroke-linecap="round" />`;
           } else if (hexes.length > 1) {
             const gradId = 'grad' + (++idCounter);
-            let stops = hexes.map((c, i) => `<stop offset="${(i / (hexes.length-1))*100}%" stop-color="${c}" />`).join('');
+            const stops = hexes.map((c, i) => `<stop offset="${(i/(hexes.length-1))*100}%" stop-color="${c}" />`).join('');
             svg.innerHTML += `<defs><linearGradient id="${gradId}" x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" gradientUnits="userSpaceOnUse">${stops}</linearGradient></defs>`;
             svg.innerHTML += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="url(#${gradId})" stroke-width="${thick}" stroke-linecap="round" />`;
           }
@@ -106,7 +198,7 @@ print:rect,outline(#333333);(1,-3)to(4,-1),thick(0.12)</textarea>
         // rect full
         m = line.match(/print:rect,full\(([^)]+)\);\(([\d.-]+),([\d.-]+)\)to\(([\d.-]+),([\d.-]+)\)/);
         if (m) {
-          const hexes = m[1].match(/#[0-9A-Fa-f]+/g) || [];
+          const hexes = parseHexes(m[1]);
           const p1 = worldToSvg(parseFloat(m[2]), parseFloat(m[3]));
           const p2 = worldToSvg(parseFloat(m[4]), parseFloat(m[5]));
           const left = Math.min(p1.x, p2.x), right = Math.max(p1.x, p2.x);
@@ -116,7 +208,7 @@ print:rect,outline(#333333);(1,-3)to(4,-1),thick(0.12)</textarea>
             svg.innerHTML += `<rect x="${left}" y="${top}" width="${w}" height="${h}" fill="${hexes[0]}" />`;
           } else if (hexes.length > 1) {
             const gradId = 'grad' + (++idCounter);
-            let stops = hexes.map((c, i) => `<stop offset="${(i / (hexes.length-1))*100}%" stop-color="${c}" />`).join('');
+            const stops = hexes.map((c, i) => `<stop offset="${(i/(hexes.length-1))*100}%" stop-color="${c}" />`).join('');
             svg.innerHTML += `<defs><linearGradient id="${gradId}" x1="${left}" y1="0" x2="${right}" y2="0" gradientUnits="userSpaceOnUse">${stops}</linearGradient></defs>`;
             svg.innerHTML += `<rect x="${left}" y="${top}" width="${w}" height="${h}" fill="url(#${gradId})" />`;
           }
@@ -135,10 +227,18 @@ print:rect,outline(#333333);(1,-3)to(4,-1),thick(0.12)</textarea>
           svg.innerHTML += `<rect x="${left}" y="${top}" width="${w}" height="${h}" fill="none" stroke="${m[1]}" stroke-width="${thick}" />`;
           return;
         }
+
+        // text
+        m = line.match(/text\("([^"]+)",\s*at=\(([\d.-]+),([\d.-]+)\),\s*size=([\d.]+),\s*color="?(#[0-9A-Fa-f]+)"?\)/);
+        if (m) {
+          const p = worldToSvg(parseFloat(m[2]), parseFloat(m[3]));
+          const size = parseFloat(m[4]) * scale;
+          svg.innerHTML += `<text x="${p.x}" y="${p.y}" font-size="${size}" fill="${m[5]}" text-anchor="middle" dominant-baseline="middle" font-family="system-ui,sans-serif">${m[1]}</text>`;
+          return;
+        }
       });
     }
 
-    // run on load
     run();
   </script>
 </body>
