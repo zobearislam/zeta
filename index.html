@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Montanza - Zeta</title>
+  <style>
+    body { margin: 0; background: #111; color: #eee; font-family: system-ui, sans-serif; }
+    #canvas { display: block; margin: 20px auto; background: white; border-radius: 8px; }
+    #editor { width: 90%; max-width: 800px; height: 200px; margin: 10px auto; display: block; background: #1e1e1e; color: #fff; border: none; padding: 10px; border-radius: 6px; font-family: monospace; }
+    button { display: block; margin: 10px auto; padding: 10px 24px; font-size: 16px; background: #0066ff; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    h1 { text-align: center; margin: 20px 0 10px; }
+  </style>
+</head>
+<body>
+  <h1>Montanza</h1>
+  <textarea id="editor">circle.full(radius=1.5, at=(-3,1), color="#00AAFF")
+print:circle,full,glow,{(grad:#FF4400,#FFAA00),(R:2.2),(1.5,-0.5),(lum:0.9)}
+print:circle,full,glow,{(grad:#00FF88),(R:1),(-2,-2),(lum:0.5)}
+cnc:(0,0)to(4,3),[{grad:(#FF0000),(#00FF00),(#0000FF)}{thick:0.25}]
+print:rect,full(#FFAA00,#FF0000);(-4,-2)to(-1,1)
+print:rect,outline(#333333);(1,-3)to(4,-1),thick(0.12)</textarea>
+  <button onclick="run()">Run</button>
+  <svg id="canvas" width="800" height="600" xmlns="http://www.w3.org/2000/svg"></svg>
+
+  <script>
+    const worldSize = 12;
+    const width = 800;
+    const height = 600;
+    const scale = Math.min(width, height) / worldSize;
+
+    function worldToSvg(x, y) {
+      return {
+        x: width / 2 + x * scale,
+        y: height / 2 - y * scale
+      };
+    }
+
+    function run() {
+      const script = document.getElementById('editor').value;
+      const svg = document.getElementById('canvas');
+      svg.innerHTML = '<rect width="100%" height="100%" fill="white"/>';
+      let idCounter = 0;
+
+      script.trim().split('\n').forEach(line => {
+        line = line.trim();
+        if (!line || line.startsWith('//')) return;
+
+        // circle.full
+        let m = line.match(/circle\.full\(radius=([\d.]+),\s*at=\(([\d.-]+),([\d.-]+)\),\s*color="?(#[0-9A-Fa-f]+)"?\)/);
+        if (m) {
+          const r = parseFloat(m[1]) * scale;
+          const p = worldToSvg(parseFloat(m[2]), parseFloat(m[3]));
+          svg.innerHTML += `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${m[4]}" />`;
+          return;
+        }
+
+        // glowing circle
+        m = line.match(/print:circle,full,glow,\{([^}]+)\}/);
+        if (m) {
+          const content = m[1];
+          const hexes = (content.match(/#[0-9A-Fa-f]+/g) || ['#FFFFFF']);
+          const rMatch = content.match(/R:([\d.]+)/);
+          const radius = rMatch ? parseFloat(rMatch[1]) : 1;
+          const posMatch = content.match(/\(([\d.-]+),([\d.-]+)\)/);
+          const at = posMatch ? [parseFloat(posMatch[1]), parseFloat(posMatch[2])] : [0, 0];
+          const lumMatch = content.match(/lum:([\d.]+)/);
+          const lum = lumMatch ? parseFloat(lumMatch[1]) : 0.6;
+
+          const p = worldToSvg(at[0], at[1]);
+          const r = radius * scale;
+          const glowId = 'glow' + (++idCounter);
+          const blur = Math.max(4, r * lum * 0.8);
+
+          svg.innerHTML += `<defs><filter id="${glowId}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="${blur}" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+
+          let fill = hexes[0];
+          if (hexes.length > 1) {
+            const gradId = 'cgrad' + idCounter;
+            let stops = hexes.map((c, i) => `<stop offset="${(i / (hexes.length-1))*100}%" stop-color="${c}" />`).join('');
+            svg.innerHTML += `<defs><radialGradient id="${gradId}" cx="50%" cy="50%" r="50%">${stops}</radialGradient></defs>`;
+            fill = `url(#${gradId})`;
+          }
+          svg.innerHTML += `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${fill}" filter="url(#${glowId})" />`;
+          return;
+        }
+
+        // cnc
+        m = line.match(/cnc:\(([\d.-]+),([\d.-]+)\)to\(([\d.-]+),([\d.-]+)\),\[\{grad:\(([^}]+)\)\}\{thick:([\d.]+)\}\]/);
+        if (m) {
+          const p1 = worldToSvg(parseFloat(m[1]), parseFloat(m[2]));
+          const p2 = worldToSvg(parseFloat(m[3]), parseFloat(m[4]));
+          const hexes = m[5].match(/#[0-9A-Fa-f]+/g) || [];
+          const thick = Math.max(1, parseFloat(m[6]) * scale);
+          if (hexes.length === 1) {
+            svg.innerHTML += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="${hexes[0]}" stroke-width="${thick}" stroke-linecap="round" />`;
+          } else if (hexes.length > 1) {
+            const gradId = 'grad' + (++idCounter);
+            let stops = hexes.map((c, i) => `<stop offset="${(i / (hexes.length-1))*100}%" stop-color="${c}" />`).join('');
+            svg.innerHTML += `<defs><linearGradient id="${gradId}" x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" gradientUnits="userSpaceOnUse">${stops}</linearGradient></defs>`;
+            svg.innerHTML += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="url(#${gradId})" stroke-width="${thick}" stroke-linecap="round" />`;
+          }
+          return;
+        }
+
+        // rect full
+        m = line.match(/print:rect,full\(([^)]+)\);\(([\d.-]+),([\d.-]+)\)to\(([\d.-]+),([\d.-]+)\)/);
+        if (m) {
+          const hexes = m[1].match(/#[0-9A-Fa-f]+/g) || [];
+          const p1 = worldToSvg(parseFloat(m[2]), parseFloat(m[3]));
+          const p2 = worldToSvg(parseFloat(m[4]), parseFloat(m[5]));
+          const left = Math.min(p1.x, p2.x), right = Math.max(p1.x, p2.x);
+          const top = Math.min(p1.y, p2.y), bottom = Math.max(p1.y, p2.y);
+          const w = right - left, h = bottom - top;
+          if (hexes.length === 1) {
+            svg.innerHTML += `<rect x="${left}" y="${top}" width="${w}" height="${h}" fill="${hexes[0]}" />`;
+          } else if (hexes.length > 1) {
+            const gradId = 'grad' + (++idCounter);
+            let stops = hexes.map((c, i) => `<stop offset="${(i / (hexes.length-1))*100}%" stop-color="${c}" />`).join('');
+            svg.innerHTML += `<defs><linearGradient id="${gradId}" x1="${left}" y1="0" x2="${right}" y2="0" gradientUnits="userSpaceOnUse">${stops}</linearGradient></defs>`;
+            svg.innerHTML += `<rect x="${left}" y="${top}" width="${w}" height="${h}" fill="url(#${gradId})" />`;
+          }
+          return;
+        }
+
+        // rect outline
+        m = line.match(/print:rect,outline\((#[0-9A-Fa-f]+)\);\(([\d.-]+),([\d.-]+)\)to\(([\d.-]+),([\d.-]+)\),thick\(([\d.]+)\)/);
+        if (m) {
+          const p1 = worldToSvg(parseFloat(m[2]), parseFloat(m[3]));
+          const p2 = worldToSvg(parseFloat(m[4]), parseFloat(m[5]));
+          const left = Math.min(p1.x, p2.x), right = Math.max(p1.x, p2.x);
+          const top = Math.min(p1.y, p2.y), bottom = Math.max(p1.y, p2.y);
+          const w = right - left, h = bottom - top;
+          const thick = Math.max(1, parseFloat(m[6]) * scale);
+          svg.innerHTML += `<rect x="${left}" y="${top}" width="${w}" height="${h}" fill="none" stroke="${m[1]}" stroke-width="${thick}" />`;
+          return;
+        }
+      });
+    }
+
+    // run on load
+    run();
+  </script>
+</body>
+</html>
