@@ -33,43 +33,32 @@ main{max-width:1400px}
 <main>
 <section class="panel">
 <h2>🧠 Zeta editor</h2><div class="pad">
-<textarea id="editor" spellcheck="false" aria-label="Zeta source code">// Zeta + Montanza example
+<textarea id="editor" spellcheck="false" aria-label="Zeta source code">// Zeta + Montanza example — use the four arrow buttons or keyboard
 bg("#111827")
 axes(0.04)
 
-let speed = 2
+let speed = 3
 let score = 0
-let playerX = 0
-let playerY = 0
 
-func greet(name) {
-  print("Hello, " + name + "!")
+entity("player", 0, 0, 0.7, 0.7, "#4F8CFF")
+entity("target", 2.5, 1, 0.6, 0.6, "#FFD166")
+
+print("Use the four arrow buttons or WASD / arrow keys to move")
+
+onUpdate {
+  if (key("ArrowRight") || key("d")) { move("player", speed * dt, 0) }
+  if (key("ArrowLeft") || key("a")) { move("player", -speed * dt, 0) }
+  if (key("ArrowUp") || key("w")) { move("player", 0, speed * dt) }
+  if (key("ArrowDown") || key("s")) { move("player", 0, -speed * dt) }
+
+  if (collides("player", "target")) {
+    score = score + 1
+    print("Score: " + score)
+    move("target", random(-2, 2), random(-1.5, 1.5))
+  }
 }
-greet("Zeta")
 
-// Conditions, math and loops
-if (score == 0) {
-  print("Use the arrow keys or touch the stage.")
-} else {
-  print("Score is " + score)
-}
-
-repeat(5) {
-  star(points=5, radius=0.18, at=(-3 + i * 1.5, 2.8), color="#FFD166")
-}
-
-// A game object moves while the game is running
-entity("player", playerX, playerY, 0.65, 0.65, "#4F8CFF")
-entity("target", 2.5, 0, 0.8, 0.8, "#FF5577")
-game.start()
-
-// Supported legacy Montanza drawing commands:
-// circle.full(radius=1, at=(0,0), color="#0066FF")
-// ellipse.full(rx=2, ry=1, at=(0,-2), color="#AA44FF")
-// tri.full(#FFDD00);(-3,2),(-1,2),(-2,4)
-// star(points=5, radius=1, at=(3,2), color="#FFCC00")
-// polygon.full(#44AAFF);(0,1),(1,0),(-1,0)
-// text("Montanza", at=(0,3), size=0.5, color="#FFFFFF")</textarea>
+game.start()</textarea>
 <div class="buttons">
 <button id="run">▶ Run program</button><button class="secondary" id="play">▶ Start game loop</button><button class="secondary" id="stop">■ Stop</button><button class="secondary" id="reset">Reset</button><button class="secondary" id="sample">Load game sample</button>
 <label class="file-label secondary" for="asset">Load sprite/image</label><input id="asset" type="file" accept="image/*">
@@ -261,7 +250,6 @@ function handleLegacy(line, env){
   if(m)shapes.push({k:'star',n:parseInt(m[1]),r:num(m[2]),x:num(m[3]),y:num(m[4]),color:safeColor(m[5])});
   return
  }
- // Silently ignore pure drawing leftovers that we couldn't fully parse
  if(!/^(star|circle|ellipse|tri|polygon|text|cnc|print:)/.test(line)){
   out('Legacy command: '+line, true);
  }
